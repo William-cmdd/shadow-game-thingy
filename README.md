@@ -1,4 +1,4 @@
-# shadow-game-thingy
+### shadow-game-thingy
 **Any form of any help would be great cause I have NO IDEA how to do pixel art, or the "best practices" of a game as this is my first real attempt at one!**  
 ---
 All the shitty pixel art was done by me lol, just a base concept of the character.
