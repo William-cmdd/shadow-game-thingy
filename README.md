@@ -14,4 +14,4 @@ The "Inventory" will be finished <30 days from now.
 - Our first spell, Frighten, freezes the enemies attacks and movement + a cool effect
 - Double jumps, basic but cool
 ---
-https://william-cmdd.github.io/shadow-game-thingy/
+Go [here](https://william-cmdd.github.io/shadow-game-thingy/) to see a "Preview" of the game.
