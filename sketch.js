@@ -12,11 +12,9 @@ const wallJumpVelX = 20, wallJumpVelY = -9;
 const GRACE_FRAMES = 35, CHARGE_FRAMES = 90;
 
 // Menu slide animation
-// menuX is the x-offset of the invImg as it slides in from the left.
-// Closed: menuX = -800 (fully off-screen). Open: menuX = 0 (fully on screen).
-const MENU_SLIDE_SPEED = 0.1; // lerp factor
-let menuX = -800;    // current animated x position
-let menuTarget = -800; // target: -800 = closed, 0 = open
+const MENU_SLIDE_SPEED = 0.1;
+let menuX = -800;
+let menuTarget = -800;
 
 // State Variables
 let x = 200, y = 200, velX = 0, velY = 0;
@@ -25,6 +23,16 @@ let facing = -1, onGround = false, touchingWall = 0;
 let jumpsLeft = 1, jumpCooldown = 0, coyoteTimer = 0;
 let playerHealth = 3, invulnTimer = 0;
 let showInventory = false;
+let gamePaused = false; // <-- NEW: pause flag
+
+// Death / Respawn sequence
+// States: "alive" | "death_screen" | "fade_out" | "fade_in"
+let deathState = "alive";
+let deathTimer = 0;
+const DEATH_SCREEN_DUR = 60;  // ~1 second showing the YOU DIED image
+const FADE_OUT_DUR     = 40;  // frames to fade to black
+const FADE_IN_DUR      = 40;  // frames to fade back in
+let fadeAlpha = 0;            // 0 = transparent, 255 = black
 
 // Spell/Ability States
 let dashing = false, dashTimer = 0, dashCooldown = 0, dashDirX = 1, dashDirY = 0;
@@ -34,7 +42,7 @@ let spaceHeld = false, spaceHoldTimer = 0, isCharging = false, chargeUsed = fals
 // Assets & Visuals
 let TRANSITION_FRAMES = 8;
 let playerImg, playerIdleImg, playerTransitionImg, jumpFrame1Img, jumpFrame3Img;
-let heartImg, invImg;
+let heartImg, invImg, deathImg;
 let dustParticles = [];
 let shakeTimer = 0, shakeAmt = 0;
 let prevVelY = 0, moveTransitionTimer = 0, wasMoving = false;
@@ -47,7 +55,10 @@ let rects = [
   { x: -200, y: 180, w: 350, h: 30 },
   { x: 400, y: -50, w: 400, h: 30 },
   { x: 110, y: -1320, w: 40, h: 1500 },
-  { x: 250, y: -1320, w: 40, h: 1500 }
+  { x: 250, y: -1320, w: 40, h: 1500 },
+  { x: 510, y: -300, w: 300, h: 30 },
+  { x: 750, y: 100, w: 40, h: 250 },
+  { x: 1350, y: -200, w: 40, h: 550 },
 ];
 let enemies = [];
 
@@ -135,7 +146,7 @@ class Enemy {
   }
 }
 
-function preload() {
+ function preload() {
   // Loading all Base64 assets
   playerImg = loadImage("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABYklEQVR4AeyWQVLCMBSGU2HsCCvQlStP4H08gSsP4MpDuOIEXssF40q7K04dGMxXiIRMB957dWCTzvxN+tK+/8trGrhwZz4yQK5ArkCuQK6AugIP4/E6VZ/dXAWA8f1k4mLdlKUjboUQA2CCWWp0Oxo54ow7wyEGIPesqtzzfP6nj8WCsOsDIQZ4q+vip7XbnV490IsHCiC7EXlPDLBNWdCu3zlvBNSsqtoqbCK6sxagzV7ctc3eqVmt9q6lFyaAruRfTdMVPhpTAbDSn6ZTdxmlpf/oY58egHUSDYm6KgAMMMIQEESfGGMix+QmFQDPYoQhfT4/dLJ9ANNY1oUX51BXgHXAjJk5icIeQIwxYhqpAUh+7fd/2nIwoOklE0AwTl+BpQomAKaMufXb5/kgE8B/mQNhAjg0c+1rMAFAfkhXw6H4T4oaIN6IuiDq7Y+SFEINgGmAYEdM9b1cuiDuPaZfAAAA//9YGm7GAAAABklEQVQDAFNelY2Wx0laAAAAAElFTkSuQmCC");
   playerIdleImg = loadImage("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABX0lEQVR4AeyUP07DMBTGHSoRqZUqtTAxsbFxH07AxAGYOARTT8C1GComyNZKQaqKfy5Oo7RN/b0MXRzp2c9/v5+fnXflLvxlgByBHIEcgRwBOQJPk8m2a0OyuQSA8ONs5tp2W5aOfitEMgAiiHWF7sZjRz/jzvAlA7D3oqrc63LZ2Nd6TbcbApEM8LFaFb9Bbl+8e6A3DxRB9iPpXjLA/5YF9faTcmdALapq1zCUKkCQKO5D1RRANA3RMQGIGr3TJQBe+st87q5bW+LT913XjnfSGkpyJQAEEHr2EIhi+PQxlqTYmSQBsBYhBPH5/bCH6dScjGQAhKPVm01wf3z4g2MoZADeAZmPk6M3JAewXgZg0Y3P/9TlaEQVDCjgQkMoTABROF6BoHcw1QTALogPuXv2wEwAfeLqNZgATp2cd8CpFDMB9AkAoURBBmgnoj6Q1DEZgI0jBBnxmDEn2rn6DwAA//+7eBh6AAAABklEQVQDANEoh7HWcC9cAAAAAElFTkSuQmCC");
@@ -149,6 +160,7 @@ deathImg =
 loadImage("data:image/png;base64,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")
   
 }
+
 
 function setup() {
   createCanvas(800, 400);
@@ -164,9 +176,12 @@ function setup() {
 function keyPressed() {
   if (key === "q" || key === "Q") {
     showInventory = !showInventory;
-    // Drive the slide: open pushes target to MENU_WIDTH, close pulls it back to 0
+    gamePaused = showInventory; // <-- pause when menu opens, unpause when closed
     menuTarget = showInventory ? 0 : -800;
   }
+
+  // Block all gameplay inputs while paused
+  if (gamePaused) return;
 
   if (keyCode === 32 || keyCode === UP_ARROW || key === 'w' || key === 'W') {
     spaceHeld = true;
@@ -190,6 +205,9 @@ function keyPressed() {
 }
 
 function keyReleased() {
+  // Block all gameplay inputs while paused
+  if (gamePaused) return;
+
   if (keyCode === 32 || keyCode === UP_ARROW || key === 'w' || key === 'W') {
     if (!chargeUsed && jumpCooldown <= 0 && (onGround || coyoteTimer > 0)) {
       let prog = getChargeProgress();
@@ -206,57 +224,81 @@ function keyReleased() {
 }
 
 function draw() {
-  updateTimers();
-
-  // Smoothly animate menuX toward its target each frame
+  // Smoothly animate menuX toward its target every frame (even while paused, so the slide is smooth)
   menuX = lerp(menuX, menuTarget, MENU_SLIDE_SPEED);
   if (abs(menuX - menuTarget) < 1) menuX = menuTarget;
 
-  let fIntensity = frightenVisualTimer > 0 ? map(frightenVisualTimer, 0, FRIGHTEN_FLASH_DUR, 0, 1) : 0;
-  background(lerpColor(color(40), color(0), fIntensity));
+  // --- Only run game logic when NOT paused and player is alive ---
+  if (!gamePaused && deathState === "alive") {
+    updateTimers();
 
-  // Movement Logic
-  if (onGround) { coyoteTimer = COYOTE_FRAMES; jumpsLeft = 1; }
-  else if (coyoteTimer > 0) coyoteTimer--;
+    let fIntensity = frightenVisualTimer > 0 ? map(frightenVisualTimer, 0, FRIGHTEN_FLASH_DUR, 0, 1) : 0;
+    background(lerpColor(color(40), color(0), fIntensity));
 
-  if (spaceHeld && !chargeUsed && (onGround || coyoteTimer > 0)) {
-    spaceHoldTimer++;
-    if (spaceHoldTimer > GRACE_FRAMES) isCharging = true;
-    if (isCharging && getChargeProgress() >= 1.0) {
-      executeJump(MAX_JUMP, false);
-      shakeTimer = 8; shakeAmt = 5;
-      spawnDust(x, y + playerH / 2, 18);
+    // Movement Logic
+    if (onGround) { coyoteTimer = COYOTE_FRAMES; jumpsLeft = 1; }
+    else if (coyoteTimer > 0) coyoteTimer--;
+
+    if (spaceHeld && !chargeUsed && (onGround || coyoteTimer > 0)) {
+      spaceHoldTimer++;
+      if (spaceHoldTimer > GRACE_FRAMES) isCharging = true;
+      if (isCharging && getChargeProgress() >= 1.0) {
+        executeJump(MAX_JUMP, false);
+        shakeTimer = 8; shakeAmt = 5;
+        spawnDust(x, y + playerH / 2, 18);
+      }
     }
+
+    prevVelY = velY;
+    handleMovement();
+    resolveCollisions();
+
+    camX = x - width / 2;
+    camY = y - height / 2;
+
+    push();
+    translate(
+      shakeTimer > 0 ? random(-shakeAmt, shakeAmt) : 0,
+      shakeTimer > 0 ? random(-shakeAmt, shakeAmt) : 0
+    );
+
+    // Render World
+    let worldCol = lerpColor(color(80, 120, 200), color(255), fIntensity);
+    fill(lerpColor(color(20), color(255), fIntensity));
+    rect(-1000 - camX, groundY - camY, 3000, 500);
+    for (let r of rects) { fill(worldCol); rect(r.x - camX, r.y - camY, r.w, r.h); }
+
+    // Entities & Particles
+    for (let en of enemies) { en.update(); en.draw(camX, camY, fIntensity); }
+    updateDust();
+
+    drawPlayer();
+    pop();
+
+  } else if (gamePaused && deathState === "alive") {
+    // --- PAUSED (inventory open): redraw the frozen world without advancing any logic ---
+    let fIntensity = frightenVisualTimer > 0 ? map(frightenVisualTimer, 0, FRIGHTEN_FLASH_DUR, 0, 1) : 0;
+    background(lerpColor(color(40), color(0), fIntensity));
+
+    // Dim overlay to signal pause
+    fill(0, 0, 0, 120);
+    rect(0, 0, width, height);
+
+    push();
+    // Render frozen world
+    let worldCol = lerpColor(color(80, 120, 200), color(255), fIntensity);
+    fill(lerpColor(color(20), color(255), fIntensity));
+    rect(-1000 - camX, groundY - camY, 3000, 500);
+    for (let r of rects) { fill(worldCol); rect(r.x - camX, r.y - camY, r.w, r.h); }
+
+    // Draw frozen enemies & player (no update calls)
+    for (let en of enemies) { en.draw(camX, camY, fIntensity); }
+    updateDust(); // let existing dust particles finish fading
+    drawPlayer();
+    pop();
   }
 
-  prevVelY = velY;
-  handleMovement();
-  resolveCollisions();
-
-  camX = x - width / 2;
-  camY = y - height / 2;
-
-  push();
-  translate(
-    shakeTimer > 0 ? random(-shakeAmt, shakeAmt) : 0,
-    shakeTimer > 0 ? random(-shakeAmt, shakeAmt) : 0
-  );
-
-  // Render World
-  let worldCol = lerpColor(color(80, 120, 200), color(255), fIntensity);
-  fill(lerpColor(color(20), color(255), fIntensity));
-  rect(-1000 - camX, groundY - camY, 3000, 500);
-  for (let r of rects) { fill(worldCol); rect(r.x - camX, r.y - camY, r.w, r.h); }
-
-  // Entities & Particles
-  for (let en of enemies) { en.update(); en.draw(camX, camY, fIntensity); }
-  updateDust();
-
-  drawPlayer();
-  pop();
-
-  // --- UI (no shake) ---
-  // Draw the inventory image sliding in from the left — it IS the panel
+  // --- UI always draws (menu panel, hearts, spell icon) ---
   if (invImg && menuX > -800) {
     push();
     imageMode(CORNER);
@@ -264,20 +306,71 @@ function draw() {
     imageMode(CENTER);
     pop();
   }
-  drawHealthBar();      // hearts ride along with the panel edge
+  drawHealthBar();
   drawSpellIcon();
 
-  // Game Over
-  if (playerHealth <= 0) {
-    fill(255); textSize(32); textAlign(CENTER);
-    fill(0,0,0,99.9)
-    rect(0,0,800,400) 
-    image(deathImg, width / 2, height / 2, 500,250);
-    noLoop();
+  // --- Death / Respawn sequence ---
+  if (playerHealth <= 0 && deathState === "alive") {
+    deathState = "death_screen";
+    deathTimer = DEATH_SCREEN_DUR;
+    fadeAlpha = 0;
+    gamePaused = true;
+  }
+
+  if (deathState === "death_screen") {
+    // Semi-dark overlay + YOU DIED image
+    fill(0, 0, 0, 140);
+    rect(0, 0, width, height);
+    if (deathImg) image(deathImg, width / 2, height / 2, 500, 250);
+
+    deathTimer--;
+    if (deathTimer <= 0) {
+      deathState = "fade_out";
+      deathTimer = FADE_OUT_DUR;
+    }
+  }
+
+  if (deathState === "fade_out") {
+    // Keep the YOU DIED image visible while fading to black
+    fill(0, 0, 0, 140);
+    rect(0, 0, width, height);
+    if (deathImg) image(deathImg, width / 2, height / 2, 500, 250);
+
+    fadeAlpha = map(deathTimer, FADE_OUT_DUR, 0, 0, 255);
+    fill(0, 0, 0, fadeAlpha);
+    rect(0, 0, width, height);
+
+    deathTimer--;
+    if (deathTimer <= 0) {
+      // Respawn the player
+      playerHealth = 3;
+      x = 200; y = 200;
+      velX = 0; velY = 0;
+      dashing = false; dashTimer = 0; dashCooldown = 0;
+      frightenTimer = 0; frightenVisualTimer = 0; frightenCooldown = 0;
+      invulnTimer = 60; // brief grace period after respawn
+      dustParticles = [];
+      for (let en of enemies) { en.state = "PATROL"; en.vx = 1.2; }
+
+      deathState = "fade_in";
+      deathTimer = FADE_IN_DUR;
+      fadeAlpha = 255;
+      gamePaused = false; // resume the game so the world renders properly
+    }
+  }
+
+  if (deathState === "fade_in") {
+    fadeAlpha = map(deathTimer, FADE_IN_DUR, 0, 255, 0);
+    fill(0, 0, 0, fadeAlpha);
+    rect(0, 0, width, height);
+
+    deathTimer--;
+    if (deathTimer <= 0) {
+      deathState = "alive";
+      fadeAlpha = 0;
+    }
   }
 }
-
-
 
 // --- Health Bar ---
 function drawHealthBar() {
@@ -288,9 +381,6 @@ function drawHealthBar() {
   const HEART_W = 12 * HEART_SCALE;
   const HEART_H = 10 * HEART_SCALE;
 
-  // menuX goes from -800 (closed) to 0 (open).
-  // The menu image's right edge is at: menuX + 800
-  // Hearts sit 20px to the right of that edge, but never left of 20px (closed resting spot).
   let heartsOriginX = max(HEART_MARGIN, menuX + 800 / 3 + HEART_MARGIN);
 
   for (let i = 0; i < 3; i++) {
@@ -385,7 +475,10 @@ function updateDust() {
   noStroke();
   for (let i = dustParticles.length - 1; i >= 0; i--) {
     let d = dustParticles[i];
-    d.x += d.vx; d.y += d.vy; d.vy += 0.18; d.vx *= 0.9; d.life--;
+    // Only advance physics when not paused
+    if (!gamePaused) {
+      d.x += d.vx; d.y += d.vy; d.vy += 0.18; d.vx *= 0.9; d.life--;
+    }
     fill(210, 195, 170, map(d.life, 0, d.maxLife, 0, 200));
     rect(d.x - camX, d.y - camY, d.size, d.size);
     if (d.life <= 0) dustParticles.splice(i, 1);
