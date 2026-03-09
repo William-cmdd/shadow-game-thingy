@@ -13,10 +13,10 @@ This is all done in p5js, later on we'll be using more languages (HTML, CSS).
 - Double jumps, basic but cool
 ---
 ## Controls:
-W/SPACE = Jump, Hold either or = High jumnp
-1 = Frighten
-A/D move right or left
-SHIFT = dash
+- W/SPACE = Jump, Hold either or = High jumnp
+- 1 = Frighten
+- A/D move right or left
+- SHIFT = dash
 
 Go [here](https://william-cmdd.github.io/shadow-game-thingy/) to see a "Preview" of the game.
 
