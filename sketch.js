@@ -23,16 +23,15 @@ let facing = -1, onGround = false, touchingWall = 0;
 let jumpsLeft = 1, jumpCooldown = 0, coyoteTimer = 0;
 let playerHealth = 3, invulnTimer = 0;
 let showInventory = false;
-let gamePaused = false; // <-- NEW: pause flag
+let gamePaused = false; 
 
 // Death / Respawn sequence
-// States: "alive" | "death_screen" | "fade_out" | "fade_in"
 let deathState = "alive";
 let deathTimer = 0;
-const DEATH_SCREEN_DUR = 60;  // ~1 second showing the YOU DIED image
-const FADE_OUT_DUR     = 40;  // frames to fade to black
-const FADE_IN_DUR      = 40;  // frames to fade back in
-let fadeAlpha = 0;            // 0 = transparent, 255 = black
+const DEATH_SCREEN_DUR = 60;  
+const FADE_OUT_DUR     = 40;  
+const FADE_IN_DUR      = 40;  
+let fadeAlpha = 0;            
 
 // Spell/Ability States
 let dashing = false, dashTimer = 0, dashCooldown = 0, dashDirX = 1, dashDirY = 0;
@@ -85,7 +84,6 @@ class Enemy {
     if (this.state === "PATROL") {
       this.x += this.vx;
       this.dir = this.vx > 0 ? 1 : -1;
-
       if (playerOnMyPlat) {
         let toPlayer = x - this.x;
         if ((toPlayer > 0 && this.dir > 0) || (toPlayer < 0 && this.dir < 0)) {
@@ -93,15 +91,12 @@ class Enemy {
           this.noticeTimer = 45;
         }
       }
-
       if (this.x < this.plat.x + 10) this.vx = 1.2;
       if (this.x > this.plat.x + this.plat.w - 10) this.vx = -1.2;
-
     } else if (this.state === "NOTICE") {
       this.noticeTimer--;
       if (this.noticeTimer <= 0) this.state = "CHASE";
       if (!playerOnMyPlat) this.state = "PATROL";
-
     } else if (this.state === "CHASE") {
       let chaseDir = x < this.x ? -1 : 1;
       this.vx = chaseDir * 4;
@@ -112,33 +107,17 @@ class Enemy {
         this.vx = this.dir * 1.2;
       }
     }
-
-    if (abs(x - this.x) < (playerW / 2 + this.w / 2) && abs(y - this.y) < (playerH / 2 + this.h / 2)) {
-      this.hitPlayer();
-    }
-  }
-
-  hitPlayer() {
-    if (invulnTimer <= 0) {
-      playerHealth--;
-      invulnTimer = 60;
-      shakeTimer = 15; shakeAmt = 10;
-      velX = (x < this.x) ? -12 : 12;
-      velY = -6;
-    }
   }
 
   draw(cx, cy, intensity) {
     push();
     rectMode(CENTER);
-
     if (intensity > 0.1) fill(lerpColor(color(180, 0, 0), color(255), intensity));
     else if (this.state === "CHASE") fill(255, 0, 0);
     else if (this.state === "NOTICE") fill(255, 255, 0);
     else fill(180, 0, 0);
 
     rect(this.x - cx, this.y - cy, this.w, this.h);
-
     fill(255);
     rect(this.x - cx + (this.dir * 10), this.y - cy - 10, 8, 8);
     pop();
@@ -166,238 +145,113 @@ function setup() {
   createCanvas(800, 400);
   imageMode(CENTER);
   noSmooth();
-
   spellIconConfig = { x: 750, y: 40, size: 40 };
-
   enemies.push(new Enemy(rects[0]));
   enemies.push(new Enemy(rects[1]));
 }
 
-function keyPressed() {
-  if (key === "q" || key === "Q") {
-    showInventory = !showInventory;
-    gamePaused = showInventory; // <-- pause when menu opens, unpause when closed
-    menuTarget = showInventory ? 0 : -800;
-  }
-
-  // Block all gameplay inputs while paused
-  if (gamePaused) return;
-
-  if (keyCode === 32 || keyCode === UP_ARROW || key === 'w' || key === 'W') {
-    spaceHeld = true;
-    spaceHoldTimer = 0;
-    chargeUsed = false;
-
-    if (!onGround && coyoteTimer <= 0 && jumpCooldown <= 0) {
-      if (touchingWall !== 0) {
-        velX = -touchingWall * wallJumpVelX;
-        executeJump(wallJumpVelY, false);
-        jumpsLeft = 1;
-      } else if (jumpsLeft > 0) {
-        executeJump(BASE_JUMP * 0.85, true);
-        spawnDust(x, y + playerH / 2, 5);
-      }
-    }
-  }
-
-  if (keyCode === SHIFT) tryDash();
-  if (key === '1') castFrighten();
-}
-
-function keyReleased() {
-  // Block all gameplay inputs while paused
-  if (gamePaused) return;
-
-  if (keyCode === 32 || keyCode === UP_ARROW || key === 'w' || key === 'W') {
-    if (!chargeUsed && jumpCooldown <= 0 && (onGround || coyoteTimer > 0)) {
-      let prog = getChargeProgress();
-      let force = lerp(BASE_JUMP, MAX_JUMP, prog);
-      if (prog >= 0.99) {
-        shakeTimer = 8; shakeAmt = 5;
-        spawnDust(x, y + playerH / 2, 18);
-      }
-      executeJump(force, false);
-    }
-    spaceHeld = false;
-    isCharging = false;
-  }
-}
-
 function draw() {
-  // Smoothly animate menuX toward its target every frame (even while paused, so the slide is smooth)
   menuX = lerp(menuX, menuTarget, MENU_SLIDE_SPEED);
   if (abs(menuX - menuTarget) < 1) menuX = menuTarget;
 
-  // --- Only run game logic when NOT paused and player is alive ---
   if (!gamePaused && deathState === "alive") {
     updateTimers();
-
     let fIntensity = frightenVisualTimer > 0 ? map(frightenVisualTimer, 0, FRIGHTEN_FLASH_DUR, 0, 1) : 0;
     background(lerpColor(color(40), color(0), fIntensity));
 
-    // Movement Logic
     if (onGround) { coyoteTimer = COYOTE_FRAMES; jumpsLeft = 1; }
     else if (coyoteTimer > 0) coyoteTimer--;
 
-    if (spaceHeld && !chargeUsed && (onGround || coyoteTimer > 0)) {
-      spaceHoldTimer++;
-      if (spaceHoldTimer > GRACE_FRAMES) isCharging = true;
-      if (isCharging && getChargeProgress() >= 1.0) {
-        executeJump(MAX_JUMP, false);
-        shakeTimer = 8; shakeAmt = 5;
-        spawnDust(x, y + playerH / 2, 18);
-      }
-    }
-
+    handleJumpInput();
     prevVelY = velY;
     handleMovement();
-    resolveCollisions();
+    
+    // RESOLUTION ORDER:
+    resolveCollisions();      // 1. Solid Walls/Floors first
+    checkEnemyCollisions();   // 2. Then check for damage triggers
 
     camX = x - width / 2;
     camY = y - height / 2;
 
     push();
-    translate(
-      shakeTimer > 0 ? random(-shakeAmt, shakeAmt) : 0,
-      shakeTimer > 0 ? random(-shakeAmt, shakeAmt) : 0
-    );
-
-    // Render World
-    let worldCol = lerpColor(color(80, 120, 200), color(255), fIntensity);
-    fill(lerpColor(color(20), color(255), fIntensity));
-    rect(-1000 - camX, groundY - camY, 3000, 500);
-    for (let r of rects) { fill(worldCol); rect(r.x - camX, r.y - camY, r.w, r.h); }
-
-    // Entities & Particles
+    translate(shakeTimer > 0 ? random(-shakeAmt, shakeAmt) : 0, shakeTimer > 0 ? random(-shakeAmt, shakeAmt) : 0);
+    renderWorld(fIntensity);
     for (let en of enemies) { en.update(); en.draw(camX, camY, fIntensity); }
     updateDust();
-
     drawPlayer();
     pop();
 
   } else if (gamePaused && deathState === "alive") {
-    // --- PAUSED (inventory open): redraw the frozen world without advancing any logic ---
-    let fIntensity = frightenVisualTimer > 0 ? map(frightenVisualTimer, 0, FRIGHTEN_FLASH_DUR, 0, 1) : 0;
-    background(lerpColor(color(40), color(0), fIntensity));
-
-    // Dim overlay to signal pause
-    fill(0, 0, 0, 120);
-    rect(0, 0, width, height);
-
-    push();
-    // Render frozen world
-    let worldCol = lerpColor(color(80, 120, 200), color(255), fIntensity);
-    fill(lerpColor(color(20), color(255), fIntensity));
-    rect(-1000 - camX, groundY - camY, 3000, 500);
-    for (let r of rects) { fill(worldCol); rect(r.x - camX, r.y - camY, r.w, r.h); }
-
-    // Draw frozen enemies & player (no update calls)
-    for (let en of enemies) { en.draw(camX, camY, fIntensity); }
-    updateDust(); // let existing dust particles finish fading
-    drawPlayer();
-    pop();
+    drawPausedState();
   }
 
-  // --- UI always draws (menu panel, hearts, spell icon) ---
-  if (invImg && menuX > -800) {
-    push();
-    imageMode(CORNER);
-    image(invImg, menuX, 0, 800, 400);
-    imageMode(CENTER);
-    pop();
-  }
-  drawHealthBar();
-  drawSpellIcon();
+  drawUI();
+  handleDeathSequence();
+}
 
-  // --- Death / Respawn sequence ---
-  if (playerHealth <= 0 && deathState === "alive") {
-    deathState = "death_screen";
-    deathTimer = DEATH_SCREEN_DUR;
-    fadeAlpha = 0;
-    gamePaused = true;
-  }
+// --- NEW: Dedicated Enemy Collision Logic ---
+function checkEnemyCollisions() {
+  if (invulnTimer > 0 || playerHealth <= 0) return;
 
-  if (deathState === "death_screen") {
-    // Semi-dark overlay + YOU DIED image
-    fill(0, 0, 0, 140);
-    rect(0, 0, width, height);
-    if (deathImg) image(deathImg, width / 2, height / 2, 500, 250);
+  for (let en of enemies) {
+    let overlapX = (playerW / 2 + en.w / 2) - abs(x - en.x);
+    let overlapY = (playerH / 2.15 + en.h / 2) - abs(y - en.y);
 
-    deathTimer--;
-    if (deathTimer <= 0) {
-      deathState = "fade_out";
-      deathTimer = FADE_OUT_DUR;
-    }
-  }
-
-  if (deathState === "fade_out") {
-    // Keep the YOU DIED image visible while fading to black
-    fill(0, 0, 0, 140);
-    rect(0, 0, width, height);
-    if (deathImg) image(deathImg, width / 2, height / 2, 500, 250);
-
-    fadeAlpha = map(deathTimer, FADE_OUT_DUR, 0, 0, 255);
-    fill(0, 0, 0, fadeAlpha);
-    rect(0, 0, width, height);
-
-    deathTimer--;
-    if (deathTimer <= 0) {
-      // Respawn the player
-      playerHealth = 3;
-      x = 200; y = 200;
-      velX = 0; velY = 0;
-      dashing = false; dashTimer = 0; dashCooldown = 0;
-      frightenTimer = 0; frightenVisualTimer = 0; frightenCooldown = 0;
-      invulnTimer = 60; // brief grace period after respawn
-      dustParticles = [];
-      for (let en of enemies) { en.state = "PATROL"; en.vx = 1.2; }
-
-      deathState = "fade_in";
-      deathTimer = FADE_IN_DUR;
-      fadeAlpha = 255;
-      gamePaused = false; // resume the game so the world renders properly
-    }
-  }
-
-  if (deathState === "fade_in") {
-    fadeAlpha = map(deathTimer, FADE_IN_DUR, 0, 255, 0);
-    fill(0, 0, 0, fadeAlpha);
-    rect(0, 0, width, height);
-
-    deathTimer--;
-    if (deathTimer <= 0) {
-      deathState = "alive";
-      fadeAlpha = 0;
+    if (overlapX > 0 && overlapY > 0) {
+      // Hit detected! 
+      playerHealth--;
+      invulnTimer = 60;
+      shakeTimer = 15; 
+      shakeAmt = 10;
+      
+      // Knockback logic (doesn't use resolution, just sets velocity)
+      velX = (x < en.x) ? -12 : 12;
+      velY = -6;
+      onGround = false;
     }
   }
 }
 
-// --- Health Bar ---
-function drawHealthBar() {
-  const HEART_MARGIN  = 20;
-  const HEART_Y       = 20;
-  const HEART_SPACING = 36;
-  const HEART_SCALE   = 2.5;
-  const HEART_W = 12 * HEART_SCALE;
-  const HEART_H = 10 * HEART_SCALE;
-
-  let heartsOriginX = max(HEART_MARGIN, menuX + 800 / 3 + HEART_MARGIN);
-
-  for (let i = 0; i < 3; i++) {
-    push();
-    if (heartImg) {
-      if (i >= playerHealth) tint(0, 150);
-      image(heartImg, heartsOriginX + (i * HEART_SPACING), HEART_Y, HEART_W, HEART_H);
-    } else {
-      noStroke();
-      fill(i < playerHealth ? color(220, 50, 50) : color(60, 20, 20));
-      ellipse(heartsOriginX + (i * HEART_SPACING), HEART_Y, HEART_W * 0.85, HEART_H);
+function handleJumpInput() {
+  if (spaceHeld && !chargeUsed && (onGround || coyoteTimer > 0)) {
+    spaceHoldTimer++;
+    if (spaceHoldTimer > GRACE_FRAMES) isCharging = true;
+    if (isCharging && getChargeProgress() >= 1.0) {
+      executeJump(MAX_JUMP, false);
+      shakeTimer = 8; shakeAmt = 5;
+      spawnDust(x, y + playerH / 2, 18);
     }
-    pop();
   }
 }
 
-// --- Helper Functions ---
+function resolveCollisions() {
+  let wasOnGround = onGround; 
+  onGround = false; 
+  touchingWall = 0;
+
+  if (y + playerH / 2 > groundY) {
+    if (!wasOnGround && prevVelY >= 0) spawnDust(x, groundY, 12);
+    y = groundY - playerH / 2; velY = 0; onGround = true;
+  }
+
+  for (let r of rects) {
+    let overlapX = (playerW / 2 + r.w / 2) - abs(x - (r.x + r.w / 2));
+    let overlapY = (playerH / 2 + r.h / 2) - abs(y - (r.y + r.h / 2));
+    if (overlapX > 0 && overlapY > 0) {
+      if (overlapX < overlapY) {
+        let sign = x < (r.x + r.w / 2) ? -1 : 1;
+        x += sign * overlapX; velX = 0; touchingWall = -sign;
+      } else {
+        let sign = y < (r.y + r.h / 2) ? -1 : 1;
+        y += sign * overlapY; velY = 0;
+        if (sign === -1) {
+          if (!wasOnGround && prevVelY >= 0) spawnDust(x, r.y, 12);
+          onGround = true;
+        }
+      }
+    }
+  }
+}
 
 function handleMovement() {
   if (dashing) {
@@ -421,18 +275,57 @@ function handleMovement() {
   if (velX < -0.1) facing = 1;
 }
 
-function updateTimers() {
-  if (dashCooldown > 0) dashCooldown--;
-  if (shakeTimer > 0) shakeTimer--;
-  if (jumpCooldown > 0) jumpCooldown--;
-  if (invulnTimer > 0) invulnTimer--;
-  if (frightenTimer > 0) frightenTimer--;
-  if (frightenVisualTimer > 0) frightenVisualTimer--;
-  if (frightenCooldown > 0) {
-    frightenCooldown--;
-    if (frightenCooldown === 0) glowTimer = 60;
+function keyPressed() {
+  if (key === "q" || key === "Q") {
+    showInventory = !showInventory;
+    gamePaused = showInventory;
+    menuTarget = showInventory ? 0 : -800;
   }
-  if (glowTimer > 0) glowTimer--;
+  if (gamePaused) return;
+
+  if (keyCode === 32 || keyCode === UP_ARROW || key === 'w' || key === 'W') {
+    spaceHeld = true;
+    spaceHoldTimer = 0;
+    chargeUsed = false;
+    if (!onGround && coyoteTimer <= 0 && jumpCooldown <= 0) {
+      if (touchingWall !== 0) {
+        velX = -touchingWall * wallJumpVelX;
+        executeJump(wallJumpVelY, false);
+        jumpsLeft = 1;
+      } else if (jumpsLeft > 0) {
+        executeJump(BASE_JUMP * 0.85, true);
+        spawnDust(x, y + playerH / 2, 5);
+      }
+    }
+  }
+  if (keyCode === SHIFT) tryDash();
+  if (key === '1') castFrighten();
+}
+
+function keyReleased() {
+  if (gamePaused) return;
+  if (keyCode === 32 || keyCode === UP_ARROW || key === 'w' || key === 'W') {
+    if (!chargeUsed && jumpCooldown <= 0 && (onGround || coyoteTimer > 0)) {
+      let prog = getChargeProgress();
+      let force = lerp(BASE_JUMP, MAX_JUMP, prog);
+      if (prog >= 0.99) {
+        shakeTimer = 8; shakeAmt = 5;
+        spawnDust(x, y + playerH / 2, 18);
+      }
+      executeJump(force, false);
+    }
+    spaceHeld = false;
+    isCharging = false;
+  }
+}
+
+// --- UI & Rendering Helpers ---
+
+function renderWorld(fIntensity) {
+  let worldCol = lerpColor(color(80, 120, 200), color(255), fIntensity);
+  fill(lerpColor(color(20), color(255), fIntensity));
+  rect(-1000 - camX, groundY - camY, 3000, 500);
+  for (let r of rects) { fill(worldCol); rect(r.x - camX, r.y - camY, r.w, r.h); }
 }
 
 function drawPlayer() {
@@ -460,6 +353,99 @@ function drawPlayer() {
   pop();
 }
 
+function drawUI() {
+  if (invImg && menuX > -800) {
+    push(); imageMode(CORNER); image(invImg, menuX, 0, 800, 400); pop();
+  }
+  drawHealthBar();
+  drawSpellIcon();
+}
+
+function drawHealthBar() {
+  const HEART_MARGIN = 20, HEART_Y = 20, HEART_SPACING = 36, HEART_SCALE = 2.5;
+  const HEART_W = 12 * HEART_SCALE, HEART_H = 10 * HEART_SCALE;
+  let heartsOriginX = max(HEART_MARGIN, menuX + 800 / 3 + HEART_MARGIN);
+  for (let i = 0; i < 3; i++) {
+    push();
+    if (heartImg) {
+      if (i >= playerHealth) tint(0, 150);
+      image(heartImg, heartsOriginX + (i * HEART_SPACING), HEART_Y, HEART_W, HEART_H);
+    } else {
+      fill(i < playerHealth ? color(220, 50, 50) : color(60, 20, 20));
+      ellipse(heartsOriginX + (i * HEART_SPACING), HEART_Y, HEART_W * 0.85, HEART_H);
+    }
+    pop();
+  }
+}
+
+function drawSpellIcon() {
+  let cx = spellIconConfig.x, cy = spellIconConfig.y, sz = spellIconConfig.size;
+  if (frightenCooldown <= 0 && glowTimer <= 0) return;
+  push();
+  noStroke(); fill(20, 180); ellipse(cx, cy, sz);
+  if (frightenCooldown > 0) {
+    fill(250, 250, 250, 180);
+    arc(cx, cy, sz, sz, -HALF_PI, -HALF_PI + (TWO_PI * (1 - frightenCooldown / FRIGHTEN_COOLDOWN_MAX)));
+  }
+  noFill(); stroke(255, glowTimer > 0 ? map(glowTimer, 0, 60, 0, 255) : 255);
+  strokeWeight(glowTimer > 0 ? map(glowTimer, 0, 60, 2, 10) : 2); ellipse(cx, cy, sz);
+  pop();
+}
+
+function drawPausedState() {
+  let fIntensity = frightenVisualTimer > 0 ? map(frightenVisualTimer, 0, FRIGHTEN_FLASH_DUR, 0, 1) : 0;
+  background(lerpColor(color(40), color(0), fIntensity));
+  fill(0, 0, 0, 120); rect(0, 0, width, height);
+  push();
+  renderWorld(fIntensity);
+  for (let en of enemies) { en.draw(camX, camY, fIntensity); }
+  updateDust();
+  drawPlayer();
+  pop();
+}
+
+function handleDeathSequence() {
+  if (playerHealth <= 0 && deathState === "alive") {
+    deathState = "death_screen"; deathTimer = DEATH_SCREEN_DUR; fadeAlpha = 0; gamePaused = true;
+  }
+  if (deathState === "death_screen") {
+    fill(0, 0, 0, 140); rect(0, 0, width, height);
+    if (deathImg) image(deathImg, width / 2, height / 2, 500, 250);
+    if (--deathTimer <= 0) { deathState = "fade_out"; deathTimer = FADE_OUT_DUR; }
+  }
+  if (deathState === "fade_out") {
+    fill(0, 0, 0, 140); rect(0, 0, width, height);
+    if (deathImg) image(deathImg, width / 2, height / 2, 500, 250);
+    fadeAlpha = map(deathTimer, FADE_OUT_DUR, 0, 0, 255);
+    fill(0, 0, 0, fadeAlpha); rect(0, 0, width, height);
+    if (--deathTimer <= 0) respawnPlayer();
+  }
+  if (deathState === "fade_in") {
+    fadeAlpha = map(deathTimer, FADE_IN_DUR, 0, 255, 0);
+    fill(0, 0, 0, fadeAlpha); rect(0, 0, width, height);
+    if (--deathTimer <= 0) { deathState = "alive"; fadeAlpha = 0; }
+  }
+}
+
+function respawnPlayer() {
+  playerHealth = 3; x = 200; y = 200; velX = 0; velY = 0;
+  dashing = false; frightenTimer = 0; invulnTimer = 60;
+  dustParticles = [];
+  for (let en of enemies) { en.state = "PATROL"; en.vx = 1.2; }
+  deathState = "fade_in"; deathTimer = FADE_IN_DUR; fadeAlpha = 255; gamePaused = false;
+}
+
+function updateTimers() {
+  if (dashCooldown > 0) dashCooldown--;
+  if (shakeTimer > 0) shakeTimer--;
+  if (jumpCooldown > 0) jumpCooldown--;
+  if (invulnTimer > 0) invulnTimer--;
+  if (frightenTimer > 0) frightenTimer--;
+  if (frightenVisualTimer > 0) frightenVisualTimer--;
+  if (frightenCooldown > 0 && --frightenCooldown === 0) glowTimer = 60;
+  if (glowTimer > 0) glowTimer--;
+}
+
 function spawnDust(px, py, count) {
   for (let i = 0; i < count; i++) {
     dustParticles.push({
@@ -475,34 +461,24 @@ function updateDust() {
   noStroke();
   for (let i = dustParticles.length - 1; i >= 0; i--) {
     let d = dustParticles[i];
-    // Only advance physics when not paused
-    if (!gamePaused) {
-      d.x += d.vx; d.y += d.vy; d.vy += 0.18; d.vx *= 0.9; d.life--;
-    }
+    if (!gamePaused) { d.x += d.vx; d.y += d.vy; d.vy += 0.18; d.vx *= 0.9; d.life--; }
     fill(210, 195, 170, map(d.life, 0, d.maxLife, 0, 200));
     rect(d.x - camX, d.y - camY, d.size, d.size);
     if (d.life <= 0) dustParticles.splice(i, 1);
   }
 }
 
-function getChargeProgress() {
-  return !isCharging ? 0 : min(max(0, spaceHoldTimer - GRACE_FRAMES) / CHARGE_FRAMES, 1);
-}
-
+function getChargeProgress() { return !isCharging ? 0 : min(max(0, spaceHoldTimer - GRACE_FRAMES) / CHARGE_FRAMES, 1); }
 function executeJump(force, consumeDouble) {
   velY = force; onGround = false; coyoteTimer = 0; jumpCooldown = 10; chargeUsed = true;
   if (consumeDouble) jumpsLeft--;
 }
-
 function castFrighten() {
   if (frightenTimer <= 0 && frightenCooldown <= 0) {
-    frightenTimer = FRIGHTEN_TOTAL_DUR;
-    frightenVisualTimer = FRIGHTEN_FLASH_DUR;
-    frightenCooldown = FRIGHTEN_COOLDOWN_MAX;
-    shakeTimer = 20; shakeAmt = 10;
+    frightenTimer = FRIGHTEN_TOTAL_DUR; frightenVisualTimer = FRIGHTEN_FLASH_DUR;
+    frightenCooldown = FRIGHTEN_COOLDOWN_MAX; shakeTimer = 20; shakeAmt = 10;
   }
 }
-
 function tryDash() {
   if (dashing || dashCooldown > 0) return;
   dashing = true; dashTimer = DASH_FRAMES; dashCooldown = DASH_COOLDOWN;
@@ -512,46 +488,5 @@ function tryDash() {
   dashDirX = ix / len; dashDirY = iy / len;
 }
 
-function resolveCollisions() {
-  let wasOnGround = onGround; onGround = false; touchingWall = 0;
-  if (y + playerH / 2 > groundY) {
-    if (!wasOnGround && prevVelY >= 0) spawnDust(x, groundY, 12);
-    y = groundY - playerH / 2; velY = 0; onGround = true;
-  }
-  for (let r of rects) {
-    let overlapX = (playerW / 2 + r.w / 2) - abs(x - (r.x + r.w / 2));
-    let overlapY = (playerH / 2 + r.h / 2) - abs(y - (r.y + r.h / 2));
-    if (overlapX > 0 && overlapY > 0) {
-      if (overlapX < overlapY) {
-        let sign = x < (r.x + r.w / 2) ? -1 : 1;
-        x += sign * overlapX; velX = 0; touchingWall = -sign;
-      } else {
-        let sign = y < (r.y + r.h / 2) ? -1 : 1;
-        y += sign * overlapY; velY = 0;
-        if (sign === -1) {
-          if (!wasOnGround && prevVelY >= 0) spawnDust(x, r.y, 12);
-          onGround = true;
-        }
-      }
-    }
-  }
-}
 
-function drawSpellIcon() {
-  let cx = spellIconConfig.x, cy = spellIconConfig.y, sz = spellIconConfig.size;
-  let masterAlpha = (frightenCooldown > 0 || glowTimer > 0) ? 255 : 0;
-  if (masterAlpha <= 0) return;
 
-  push();
-  noStroke(); fill(20, 180);
-  ellipse(cx, cy, sz);
-  if (frightenCooldown > 0) {
-    fill(250, 250, 250, 180);
-    arc(cx, cy, sz, sz, -HALF_PI, -HALF_PI + (TWO_PI * (1 - frightenCooldown / FRIGHTEN_COOLDOWN_MAX)));
-  }
-  noFill();
-  stroke(255, glowTimer > 0 ? map(glowTimer, 0, 60, 0, 255) : 255);
-  strokeWeight(glowTimer > 0 ? map(glowTimer, 0, 60, 2, 10) : 2);
-  ellipse(cx, cy, sz);
-  pop();
-}
